@@ -80,7 +80,9 @@ renderPlotly({
       color = 'rgba(71, 58, 131, 0.8)'
     )
   ) %>%
-    layout(paper_bgcolor = 'rgb(248, 248, 255)', plot_bgcolor = 'rgb(248, 248, 255)')
+    layout(paper_bgcolor = 'rgb(248, 248, 255)', 
+           plot_bgcolor = 'rgb(248, 248, 255)',
+           yaxis = list(title = 'Revenue Gap'))
   })
 ```
 
@@ -103,7 +105,8 @@ renderPlotly({
   marker = list(
     color = 'rgba(50, 171, 96, 0.6)'
   )
-)
+) %>%
+    layout(yaxis = list(title = 'Actual Revenue'))
   
   dataToPlot2 <- filteredData() %>%
     gather(key = "DepartmentBudget", value = "BudgetRevenue", contains('Budget')) %>%
@@ -129,9 +132,9 @@ renderPlotly({
       color = 'rgba(71, 58, 131, 0.8)'
     )) %>%
     layout(yaxis2=ay,
-           #legend = list(x = 0.2, y = 100))
            legend = list(x = 0.7, y = 1),
-           paper_bgcolor = 'rgb(248, 248, 255)', plot_bgcolor = 'rgb(248, 248, 255)')
+           paper_bgcolor = 'rgb(248, 248, 255)', 
+           plot_bgcolor = 'rgb(248, 248, 255)')
   p})
 ```
 
