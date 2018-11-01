@@ -137,14 +137,6 @@ renderPlotly({
     group_by(Department) %>%
     summarise(MarginPercent = sum(RevenueGap)*100.00/sum(BudgetRevenue))
   
-  #dataToPlot2 <- filteredData() %>%
-  #  gather(key = "DepartmentBudget", value = "BudgetRevenue", contains('Budget')) %>%
-  #  gather(key = "DepartmentActual", value = "ActualRevenue", contains('Actual')) %>%
-  #  mutate(Department = gsub('Budget', '', DepartmentBudget)) %>%
-  #  mutate(RevenueGap = ActualRevenue - BudgetRevenue) %>%
-  #  group_by(Department) %>%
-  #  summarise(MarginPercent = sum(RevenueGap)*100.00/sum(BudgetRevenue))
-  
   ay <- list(
   tickfont = list(color = "red"),
   overlaying = "y",
