@@ -62,16 +62,25 @@ Row {data-height=500}
 ### **Revenue Gap across Departments**
 ```{r}
 renderPlotly({
-  dataToPlot <- filteredData() %>%
-    gather(key = "DepartmentBudget", value = "BudgetRevenue", contains('Budget')) %>%
-    gather(key = "DepartmentActual", value = "ActualRevenue", contains('Actual')) %>%
-    mutate(Department = gsub('Budget', '', DepartmentBudget)) %>%
-    mutate(RevenueGap = ActualRevenue - BudgetRevenue) %>%
-    select(one_of('Department', 'RevenueGap')) %>%
-    group_by(Department) %>%
-    summarise(RevenueGap = sum(RevenueGap))
+  actualRev <- filteredData() %>%
+  select(date, ends_with('Actual')) %>%
+  gather(key = "DepartmentActual", value = "ActualRevenue", contains('Actual')) %>%
+  mutate(Department = gsub('Actual', '', DepartmentActual)) 
+ 
   
-  p <- plot_ly(dataToPlot, 
+budgetRev <- filteredData() %>%
+  select(date, ends_with('Budget')) %>%
+  gather(key = "DepartmentBudget", value = "BudgetRevenue", contains('Budget')) %>%
+  mutate(Department = gsub('Budget', '', DepartmentBudget)) 
+
+revGap <- inner_join(actualRev, budgetRev,
+               by = c('date', 'Department')) %>%
+  mutate(RevenueGap = ActualRevenue-BudgetRevenue) %>%
+  select(one_of('Department', 'RevenueGap')) %>%
+  group_by(Department) %>%
+  summarise(RevenueGap = sum(RevenueGap))
+  
+  p <- plot_ly(revGap, 
                x = ~Department, y = ~RevenueGap,
   name = "Revenue Gap",
   type = "bar",
@@ -92,8 +101,8 @@ renderPlotly({
 renderPlotly({
   dataToPlot1 <- filteredData() %>%
     select('date', ends_with('Actual')) %>%
-    gather(key = "DepartmentActual", value = "ActualRevenue", -date) %>%
-    mutate(Department = gsub('Actual', '', DepartmentActual)) %>%
+    gather(key = "Department", value = "ActualRevenue", -date) %>%
+    mutate(Department = gsub('Actual', '', Department)) %>%
     select(one_of('Department', 'ActualRevenue')) %>%
     group_by(Department) %>%
     summarise(ActualRevenue = sum(ActualRevenue))
@@ -108,13 +117,33 @@ renderPlotly({
 ) %>%
     layout(yaxis = list(title = 'Actual Revenue'))
   
-  dataToPlot2 <- filteredData() %>%
-    gather(key = "DepartmentBudget", value = "BudgetRevenue", contains('Budget')) %>%
-    gather(key = "DepartmentActual", value = "ActualRevenue", contains('Actual')) %>%
-    mutate(Department = gsub('Budget', '', DepartmentBudget)) %>%
-    mutate(RevenueGap = ActualRevenue - BudgetRevenue) %>%
+  actualRev <- filteredData() %>%
+    select(date, ends_with('Actual')) %>%
+    gather(key = "DepartmentActual", value = "ActualRevenue", 
+           contains('Actual')) %>%
+    mutate(Department = gsub('Actual', '', DepartmentActual)) 
+ 
+  
+  budgetRev <- filteredData() %>%
+    select(date, ends_with('Budget')) %>%
+    gather(key = "DepartmentBudget", value = "BudgetRevenue", 
+           contains('Budget')) %>%
+    mutate(Department = gsub('Budget', '', DepartmentBudget)) 
+
+   percentMargin <- inner_join(actualRev, budgetRev,
+                       by = c('date', 'Department')) %>%
+    mutate(RevenueGap = ActualRevenue-BudgetRevenue) %>%
+    select(one_of('Department', 'RevenueGap', 'BudgetRevenue')) %>%
     group_by(Department) %>%
     summarise(MarginPercent = sum(RevenueGap)*100.00/sum(BudgetRevenue))
+  
+  #dataToPlot2 <- filteredData() %>%
+  #  gather(key = "DepartmentBudget", value = "BudgetRevenue", contains('Budget')) %>%
+  #  gather(key = "DepartmentActual", value = "ActualRevenue", contains('Actual')) %>%
+  #  mutate(Department = gsub('Budget', '', DepartmentBudget)) %>%
+  #  mutate(RevenueGap = ActualRevenue - BudgetRevenue) %>%
+  #  group_by(Department) %>%
+  #  summarise(MarginPercent = sum(RevenueGap)*100.00/sum(BudgetRevenue))
   
   ay <- list(
   tickfont = list(color = "red"),
@@ -124,7 +153,7 @@ renderPlotly({
   )
 
   p <- p %>%
-    add_trace(x = ~dataToPlot2$Department, y = ~dataToPlot2$MarginPercent, 
+    add_trace(x = ~percentMargin$Department, y = ~percentMargin$MarginPercent, 
               type = "scatter",
               name = "Revenue Margin(%)",
               mode = 'lines+markers', yaxis = "y2",
