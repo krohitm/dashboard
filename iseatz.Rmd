@@ -1,0 +1,148 @@
+---
+title: "Revenue Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyr)
+library(dplyr)
+library(shiny)
+library(plotly)
+```
+
+```{r}
+#source files
+source('./simulatedData.R', local = T)
+```
+
+```{r}
+#import source data
+revenueData <- sourceData()
+```
+
+Budget Variance
+=======================================================================
+
+Sidebar {.sidebar data-width=200}
+-----------------------------------------------------------------------
+```{r}
+#drop down for YTD/MTD
+selectInput('ytdMtd', 'Select Period Type',
+            choices = c('YTD', 'MTD'),
+            selected = 'YTD')
+
+#date input for UI
+dateInput('dateLimit', 'Select date', value = as.Date('2018-01-01'), 
+          min = min(revenueData$date), max = as.Date(Sys.Date()))
+
+```
+
+```{r}
+#common filtering for data
+filteredData <- 
+  reactive({revenueData %>%
+    {if (input$ytdMtd == 'YTD') 
+      filter(., as.Date(date, origin = "1970-01-01") >= as.Date(
+        input$dateLimit, origin = "1970-01-01") %>%
+    format("%Y-01-01"))
+      else
+        filter(., as.Date(date, origin = "1970-01-01") >= as.Date(
+          input$dateLimit, origin = "1970-01-01") %>%
+            format("%Y-%m-01"))}
+  })
+```
+
+
+Row {data-height=500}
+-----------------------------------------------------------------------
+### **Revenue Gap across Departments**
+```{r}
+renderPlotly({
+  dataToPlot <- filteredData() %>%
+    gather(key = "DepartmentBudget", value = "BudgetRevenue", contains('Budget')) %>%
+    gather(key = "DepartmentActual", value = "ActualRevenue", contains('Actual')) %>%
+    mutate(Department = gsub('Budget', '', DepartmentBudget)) %>%
+    mutate(RevenueGap = ActualRevenue - BudgetRevenue) %>%
+    select(one_of('Department', 'RevenueGap')) %>%
+    group_by(Department) %>%
+    summarise(RevenueGap = sum(RevenueGap))
+  
+  p <- plot_ly(dataToPlot, 
+               x = ~Department, y = ~RevenueGap,
+  name = "Revenue Gap",
+  type = "bar",
+  #orientation = 'h',
+   marker = list(
+      color = 'rgba(71, 58, 131, 0.8)'
+    )
+  ) %>%
+    layout(paper_bgcolor = 'rgb(248, 248, 255)', plot_bgcolor = 'rgb(248, 248, 255)')
+  })
+```
+
+
+### **Department revenue and Percent Margin**
+```{r}
+renderPlotly({
+  dataToPlot1 <- filteredData() %>%
+    select('date', ends_with('Actual')) %>%
+    gather(key = "DepartmentActual", value = "ActualRevenue", -date) %>%
+    mutate(Department = gsub('Actual', '', DepartmentActual)) %>%
+    select(one_of('Department', 'ActualRevenue')) %>%
+    group_by(Department) %>%
+    summarise(ActualRevenue = sum(ActualRevenue))
+  
+  p <- plot_ly(dataToPlot1, 
+               x = ~Department, y = ~ActualRevenue,
+  name = "Actual Revenue",
+  type = "bar",
+  marker = list(
+    color = 'rgba(50, 171, 96, 0.6)'
+  )
+)
+  
+  dataToPlot2 <- filteredData() %>%
+    gather(key = "DepartmentBudget", value = "BudgetRevenue", contains('Budget')) %>%
+    gather(key = "DepartmentActual", value = "ActualRevenue", contains('Actual')) %>%
+    mutate(Department = gsub('Budget', '', DepartmentBudget)) %>%
+    mutate(RevenueGap = ActualRevenue - BudgetRevenue) %>%
+    group_by(Department) %>%
+    summarise(MarginPercent = sum(RevenueGap)*100.00/sum(BudgetRevenue))
+  
+  ay <- list(
+  tickfont = list(color = "red"),
+  overlaying = "y",
+  side = "right",
+  title = "Revenue Margin(%)"
+  )
+
+  p <- p %>%
+    add_trace(x = ~dataToPlot2$Department, y = ~dataToPlot2$MarginPercent, 
+              type = "scatter",
+              name = "Revenue Margin(%)",
+              mode = 'lines+markers', yaxis = "y2",
+              marker = list(
+      color = 'rgba(71, 58, 131, 0.8)'
+    )) %>%
+    layout(yaxis2=ay,
+           #legend = list(x = 0.2, y = 100))
+           legend = list(x = 0.7, y = 1),
+           paper_bgcolor = 'rgb(248, 248, 255)', plot_bgcolor = 'rgb(248, 248, 255)')
+  p})
+```
+
+Row
+--------------------------------------------------------------------------------
+
+Data Source
+=======================================================================
+```{r}
+DT::datatable(revenueData, options = list(
+  pageLength = 25
+))
+```
+
