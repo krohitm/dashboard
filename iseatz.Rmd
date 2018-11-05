@@ -12,16 +12,12 @@ library(tidyr)
 library(dplyr)
 library(shiny)
 library(plotly)
-```
-
-```{r}
-#source files
-source('./simulatedData.R', local = T)
+library(purrr)
 ```
 
 ```{r}
 #import source data
-revenueData <- sourceData()
+revenueData <- readxl::read_excel('./dummy data.xlsx')
 ```
 
 Budget Variance
@@ -37,8 +33,11 @@ selectInput('ytdMtd', 'Select Period Type',
 
 #date input for UI
 dateInput('dateLimit', 'Select date', value = as.Date('2018-01-01'), 
-          min = min(revenueData$date), max = as.Date(Sys.Date()))
+          min = as.Date('2018-01-01'), max = max(revenueData$Date))
 
+# radio button for absolute or signed revenue gap and % margin
+radioButtons('revenueGapSign', 'Sign for revenue gap and % margin',
+             choices = c('Absolute', 'Signed'), selected = 'Absolute')
 ```
 
 ```{r}
@@ -46,14 +45,85 @@ dateInput('dateLimit', 'Select date', value = as.Date('2018-01-01'),
 filteredData <- 
   reactive({revenueData %>%
     {if (input$ytdMtd == 'YTD') 
-      filter(., as.Date(date, origin = "1970-01-01") >= as.Date(
-        input$dateLimit, origin = "1970-01-01") %>%
+      filter(.,Period == 'YTD', 
+             Date >= as.Date(input$dateLimit, origin = "1970-01-01") %>%
     format("%Y-01-01"))
       else
-        filter(., as.Date(date, origin = "1970-01-01") >= as.Date(
-          input$dateLimit, origin = "1970-01-01") %>%
-            format("%Y-%m-01"))}
+        filter(.,Period == 'MTD'
+               , Date >= as.Date(input$dateLimit, origin = "1970-01-01") %>%
+                 format("%Y-%m-01"))
+      }
   })
+
+#function to map colors to bars
+  gapColor <- function(x){
+    if (x < 0)
+      'rgb(34,139,34)'
+    else
+      'rgb(255,0,0)'
+  }
+  
+#function to check absolute or signed
+valueSign <- function(x, axisExtender=0){
+  if (input$revenueGapSign == 'Absolute')
+    abs(x)
+  else
+    -x-axisExtender
+}
+  
+#function for plotting actual, budget, revenue gap and % margin
+plotRevenue <- function(actualVsRevenue){
+  actualVsRevenue <- actualVsRevenue %>%
+    select(one_of('Department', 'Actual', 'Budget')) %>%
+    group_by(Department) %>%
+    summarise(Actual = sum(Actual), 
+              Budget = sum(Budget),
+              revenueGap = sum(Budget-Actual),
+              MarginPercent = sum(revenueGap)*100.00/sum(Budget))
+  
+  plot_ly(actualVsRevenue, 
+               x = ~Department, 
+               y = ~Actual,
+               name = "Actual Revenue",
+               type = "bar",
+               marker = list(color = 'rgb(55, 83, 109)')
+  ) %>%
+    #bars for budget revenue
+    add_trace(y = ~Budget, name = 'Budget Revenue', 
+              marker = list(color = 'rgb(26, 118, 255)')) %>%
+    #add_trace(y = ~valueSign(revenueGap), name = 'Revenue Gap', 
+    #          marker = list(
+    #            color = map(actualVsRevenue$revenueGap,
+    #                        gapColor))) %>%
+    layout(yaxis = list(title = 'Revenue')) %>%
+    #plot for percent margin
+    add_trace(x = ~Department, y = ~valueSign(MarginPercent), 
+              size = ~abs(MarginPercent),
+              type = "scatter",
+              name = "% Margin",
+              mode = 'lines+markers', yaxis = "y2",
+              line = list(
+                color = 'rgb(255,165,0)'
+              ),
+              marker = list(
+                color = 'rgb(255,165,0)'
+              )
+    ) %>%
+    layout(yaxis2=list(range = c(
+      min(0, min(valueSign(actualVsRevenue$MarginPercent, 10))),
+      max(100, max(abs(actualVsRevenue$MarginPercent)))), 
+      overlaying = "y", 
+      zeroline = TRUE,
+      #showticklabels = FALSE,
+      showgrid = TRUE,
+      #anchor = 'y1',
+      #tickmode = 'match overlay',
+      side = "right", title = "% Margin")) %>%
+    layout(
+      legend = list(x = 1.2, y = 1.2, orientation = 'h'),
+      paper_bgcolor = 'rgb(248, 248, 255)', 
+      plot_bgcolor = 'rgb(248, 248, 255)')
+}
 ```
 
 
@@ -62,109 +132,21 @@ Row {data-height=500}
 ### **Revenue Gap across Departments**
 ```{r}
 renderPlotly({
-  actualRev <- filteredData() %>%
-  select(date, ends_with('Actual')) %>%
-  gather(key = "DepartmentActual", value = "ActualRevenue", contains('Actual')) %>%
-  mutate(Department = gsub('Actual', '', DepartmentActual)) 
- 
-  
-budgetRev <- filteredData() %>%
-  select(date, ends_with('Budget')) %>%
-  gather(key = "DepartmentBudget", value = "BudgetRevenue", contains('Budget')) %>%
-  mutate(Department = gsub('Budget', '', DepartmentBudget)) 
-
-revGap <- inner_join(actualRev, budgetRev,
-               by = c('date', 'Department')) %>%
-  mutate(RevenueGap = ActualRevenue-BudgetRevenue) %>%
-  #select(one_of('Department', 'RevenueGap')) %>%
-  #group_by(Department) %>%
-  summarise(RevenueGap = sum(RevenueGap))
-  
-  p <- plot_ly(revGap, 
-               x = 'All Departments', 
-               y = ~RevenueGap,
-  name = "Revenue Gap",
-  type = "bar",
-  #orientation = 'h',
-   marker = list(
-      color = 'rgba(71, 58, 131, 0.8)'
-    )
-  ) %>%
-    layout(paper_bgcolor = 'rgb(248, 248, 255)', 
-           plot_bgcolor = 'rgb(248, 248, 255)',
-           yaxis = list(title = 'Revenue Gap'))
-  })
+actualVsRevenue <- filteredData() %>%
+  filter(Department == 'All') %>%
+  plotRevenue()
+})
 ```
-
 
 ### **Department revenue and Percent Margin**
 ```{r}
 renderPlotly({
-  actualRev <- filteredData() %>%
-  select(date, ends_with('Actual')) %>%
-  gather(key = "DepartmentActual", value = "ActualRevenue", contains('Actual')) %>%
-  mutate(Department = gsub('Actual', '', DepartmentActual)) 
- 
-  
-  budgetRev <- filteredData() %>%
-    select(date, ends_with('Budget')) %>%
-    gather(key = "DepartmentBudget", value = "BudgetRevenue", 
-           contains('Budget')) %>%
-    mutate(Department = gsub('Budget', '', DepartmentBudget)) 
-
-  actualVsRevenue <- inner_join(actualRev, budgetRev,
-                by = c('date', 'Department')) %>%
-    select(one_of('Department', 'ActualRevenue', 'BudgetRevenue')) %>%
-    group_by(Department) %>%
-    summarise(ActualRevenue = sum(ActualRevenue), 
-                BudgetRevenue = sum(BudgetRevenue))
-  
-  p <- plot_ly(actualVsRevenue, 
-               x = ~Department, y = ~ActualRevenue,
-  name = "Actual Revenue",
-  type = "bar",
-  marker = list(
-    color = 'rgb(55, 83, 109)'
-  )
-) %>%
-    add_trace(y = ~BudgetRevenue, name = 'BudgetRevenue', 
-              marker = list(color = 'rgb(26, 118, 255)')) %>%
-    layout(yaxis = list(title = 'Budget/Actual Revenue'))
-  
-  
-  #data and plot for percent margin
-   percentMargin <- inner_join(actualRev, budgetRev,
-                       by = c('date', 'Department')) %>%
-    mutate(RevenueGap = ActualRevenue-BudgetRevenue) %>%
-    select(one_of('Department', 'RevenueGap', 'BudgetRevenue')) %>%
-    group_by(Department) %>%
-    summarise(MarginPercent = sum(RevenueGap)*100.00/sum(BudgetRevenue))
-  
-  ay <- list(
-  tickfont = list(color = "red"),
-  overlaying = "y",
-  side = "right",
-  title = "Revenue Margin(%)"
-  )
-
-  p <- p %>%
-    add_trace(x = ~percentMargin$Department, y = ~percentMargin$MarginPercent, 
-              type = "scatter",
-              name = "Revenue Margin(%)",
-              mode = 'lines+markers', yaxis = "y2",
-              line = list(
-      color = 'rgb(255,165,0)'
-    ),
-    marker = list(
-      color = 'rgb(255,165,0)'
-    )
-    ) %>%
-    layout(yaxis2=ay,
-           legend = list(x = 1.2, y = 1.2, orientation = 'h'),
-           paper_bgcolor = 'rgb(248, 248, 255)', 
-           plot_bgcolor = 'rgb(248, 248, 255)')
-  p})
+  filteredData() %>%
+    filter(Department != 'All')  %>%
+    plotRevenue()
+ })
 ```
+
 
 Row
 --------------------------------------------------------------------------------

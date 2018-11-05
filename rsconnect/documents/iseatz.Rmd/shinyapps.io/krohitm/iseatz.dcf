@@ -1,0 +1,12 @@
+name: iseatz
+title: iseatz
+username:
+account: krohitm
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 545914
+bundleId: 1682052
+url: https://krohitm.shinyapps.io/iseatz/
+when: 1541389819.32033
+asMultiple: FALSE
+asStatic: FALSE
